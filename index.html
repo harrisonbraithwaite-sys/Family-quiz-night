@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Family Quiz Night (Online)</title>
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f4f4;
+      max-width: 700px;
+      margin: auto;
+      padding: 20px;
+    }
+    .card {
+      background: white;
+      padding: 20px;
+      margin-bottom: 20px;
+      border-radius: 8px;
+    }
+    input, button {
+      width: 100%;
+      padding: 10px;
+      margin-top: 10px;
+    }
+    button {
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+<h1>🎲 Family Quiz Night (Online)</h1>
+
+<div class="card" id="join">
+  <input id="room" placeholder="Room Code (e.g. FAMILY1)">
+  <input id="name" placeholder="Your Name">
+  <button onclick="joinRoom()">Join Room</button>
+</div>
+
+<div class="card" id="questions" style="display:none;">
+  <h2>Answer the Questions</h2>
+  <input id="a1" placeholder="Favorite food">
+  <input id="a2" placeholder="Favorite movie">
+  <input id="a3" placeholder="Dream vacation">
+  <button onclick="submitAnswers()">Submit Answers</button>
+</div>
+
+<div class="card" id="host" style="display:none;">
+  <button onclick="startQuiz()">Start Quiz</button>
+</div>
+
+<div class="card" id="quiz" style="display:none;">
+  <h2 id="question"></h2>
+  <div id="options"></div>
+</div>
+
+<script>
+/* 🔥 Firebase Config 🔥 */
+const firebaseConfig = const firebaseConfig = {
+  apiKey: "AIzaSyBtj_ToSoXDenG01d2kXpUyoSevM649VcE",
+  authDomain: "family-quiz-night-71749.firebaseapp.com",
+  databaseURL: "https://family-quiz-night-71749-default-rtdb.firebaseio.com",
+  projectId: "family-quiz-night-71749",
+  storageBucket: "family-quiz-night-71749.firebasestorage.app",
+  messagingSenderId: "1071425875550",
+  appId: "1:1071425875550:web:8b7abbe48e94dc3acd4ecf"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+let roomCode, playerName, quizData = [], current = 0;
+
+/* Join Room */
+function joinRoom() {
+  roomCode = document.getElementById("room").value.trim();
+  playerName = document.getElementById("name").value.trim();
+
+  if (!roomCode || !playerName) return alert("Fill everything in!");
+
+  document.getElementById("join").style.display = "none";
+  document.getElementById("questions").style.display = "block";
+
+  db.ref(`${roomCode}/players/${playerName}`).set(true);
+
+  db.ref(`${roomCode}/host`).once("value", snap => {
+    if (!snap.exists()) {
+      db.ref(`${roomCode}/host`).set(playerName);
+      document.getElementById("host").style.display = "block";
+    }
+  });
+
+  listenForQuiz();
+}
+
+/* Submit Answers */
+function submitAnswers() {
+  const answers = [
+    a1.value.trim(),
+    a2.value.trim(),
+    a3.value.trim()
+  ];
+
+  if (answers.some(a => !a)) return alert("Answer everything!");
+
+  db.ref(`${roomCode}/answers/${playerName}`).set(answers);
+  document.getElementById("questions").innerHTML = "<h2>Waiting for others…</h2>";
+}
+
+/* Start Quiz (Host Only) */
+function startQuiz() {
+  db.ref(`${roomCode}/answers`).once("value", snap => {
+    const all = snap.val();
+    if (!all || Object.keys(all).length < 2) {
+      alert("Need at least 2 players!");
+      return;
+    }
+
+    const prompts = [
+      "Who said this was their favorite food?",
+      "Who chose this movie?",
+      "Whose dream vacation is this?"
+    ];
+
+    quizData = [];
+    Object.entries(all).forEach(([name, answers]) => {
+      answers.forEach((a, i) => {
+        quizData.push({
+          q: `"${a}" — ${prompts[i]}`,
+          correct: name
+        });
+      });
+    });
+
+    quizData.sort(() => Math.random() - 0.5);
+    db.ref(`${roomCode}/quiz`).set({ quizData, current: 0 });
+  });
+}
+
+/* Listen for Quiz */
+function listenForQuiz() {
+  db.ref(`${roomCode}/quiz`).on("value", snap => {
+    if (!snap.exists()) return;
+
+    quizData = snap.val().quizData;
+    current = snap.val().current;
+
+    document.getElementById("questions").style.display = "none";
+    document.getElementById("host").style.display = "none";
+    document.getElementById("quiz").style.display = "block";
+
+    showQuestion();
+  });
+}
+
+/* Show Question */
+function showQuestion() {
+  if (current >= quizData.length) {
+    document.getElementById("quiz").innerHTML = "<h2>Game Over!</h2>";
+    return;
+  }
+
+  const q = quizData[current];
+  question.innerText = q.q;
+  options.innerHTML = "";
+
+  db.ref(`${roomCode}/players`).once("value", snap => {
+    Object.keys(snap.val()).forEach(name => {
+      const btn = document.createElement("button");
+      btn.innerText = name;
+      btn.onclick = () => nextQuestion();
+      options.appendChild(btn);
+    });
+  });
+}
+
+function nextQuestion() {
+  db.ref(`${roomCode}/quiz/current`).set(current + 1);
+}
+</script>
+
+</body>
+</html>
